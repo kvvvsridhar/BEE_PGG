@@ -183,6 +183,11 @@
         // Initialize Firebase
         function initializeFirebase() {
             try {
+                // Validate Firebase configuration before initializing
+                if (!firebaseConfig || !firebaseConfig.apiKey) {
+                    throw new Error("Firebase API key is missing or invalid.");
+                }
+
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
@@ -210,7 +215,7 @@
                 });
             } catch (error) {
                 console.error("Firebase initialization error:", error);
-                statusMessage.textContent = `Error initializing Firebase. Check console for details.`;
+                statusMessage.textContent = `Error initializing Firebase: ${error.message}`;
             }
         }
 

@@ -310,7 +310,7 @@
             const groups = groupBy(state.players, 'group');
             const sortedGroupKeys = Object.keys(groups).sort();
             const minGroupTotal = calculateMinGroupTotal(groups);
-            const isEveryoneReady = state.players.every(p => p.contributions?.[state.game.round] !== undefined);
+            const isEveryoneReady = state.players.every(p => p.contributions?.[state.game.round] !== -1);
             const playerMultipleOfGroupSize = state.players.length % state.game.gameParams.groupSize === 0;
 
             let playersTableHTML = `
@@ -434,11 +434,13 @@
             const myGroup = myData ? myData.group : 'Not Assigned';
             const myGroupMembers = groups[myGroup] || [];
             const myGroupSize = myGroupMembers.length;
-            const myGroupContribution = myGroupMembers.reduce((sum, p) => sum + (p.contributions?.[state.game.round] || 0), 0);
-            const otherGroups = Object.keys(groups).filter(g => g !== myGroup);
-            const minOtherGroupTotal = calculateMinGroupTotal(groups, myGroup);
             
             const isRegistered = myData && myData.name && myData.group;
+            
+            // Check if player has made a contribution in the current round
+            const myContribution = myData && myData.contributions && myData.contributions[state.game.round] !== undefined
+                ? myData.contributions[state.game.round]
+                : -1;
 
             let mainContentHTML = '';
             if (!isRegistered) {
@@ -501,7 +503,7 @@
                             </div>
                         </div>
 
-                        ${state.myContribution === -1 ? `
+                        ${myContribution === -1 ? `
                         <form id="contribution-form">
                             <div class="mb-4">
                                 <label for="contribution-amount" class="block text-gray-700 font-medium mb-2">
@@ -517,22 +519,22 @@
                         ` : `
                         <div class="bg-gray-100 p-6 rounded-lg text-center">
                             <p class="text-green-600 font-bold text-lg mb-2">Contribution Submitted!</p>
-                            <p class="text-gray-700">You contributed: <span class="font-bold">${state.myContribution}</span></p>
+                            <p class="text-gray-700">You contributed: <span class="font-bold">${myContribution}</span></p>
                         </div>
                         `}
                         <div class="mt-4 p-2 text-center text-sm text-gray-400 border-t border-gray-200">
                           Your User ID: ${userId}
                         </div>
                         
-                        ${!state.isRoundActive && state.myContribution !== -1 && state.game.round > 0 ? `
+                        ${!state.isRoundActive && myContribution !== -1 && state.game.round > 0 ? `
                         <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="bg-indigo-50 p-4 rounded-lg text-center">
                                 <p class="text-sm text-gray-600">Your Group's Total Pool (Prev. Round)</p>
-                                <p class="font-bold text-xl">${myGroupContribution}</p>
+                                <p class="font-bold text-xl">${myGroupMembers.reduce((sum, p) => sum + (p.contributions?.[state.game.round-1] || 0), 0)}</p>
                             </div>
                             <div class="bg-pink-50 p-4 rounded-lg text-center">
                                 <p class="text-sm text-gray-600">Min. Pool of Other Groups (Prev. Round)</p>
-                                <p class="font-bold text-xl">${minOtherGroupTotal}</p>
+                                <p class="font-bold text-xl">${calculateMinGroupTotal(groups, myGroup, state.game.round - 1)}</p>
                             </div>
                         </div>
                         <p class="mt-6 text-center text-sm text-gray-500">
@@ -555,7 +557,7 @@
 
             if (!isRegistered) {
                 document.getElementById('join-form').addEventListener('submit', joinGame);
-            } else if (state.myContribution === -1) {
+            } else if (myContribution === -1) {
                 document.getElementById('contribution-form').addEventListener('submit', submitContribution);
             }
         }
@@ -823,11 +825,11 @@
             }, {});
         }
 
-        function calculateMinGroupTotal(groups, myGroup = null) {
+        function calculateMinGroupTotal(groups, myGroup = null, round = state.game.round) {
             const groupTotals = [];
             for (const groupName in groups) {
                 if (groupName !== myGroup) {
-                    const total = groups[groupName].reduce((sum, p) => sum + (p.contributions?.[state.game?.round] || 0), 0);
+                    const total = groups[groupName].reduce((sum, p) => sum + (p.contributions?.[round] || 0), 0);
                     groupTotals.push(total);
                 }
             }

@@ -289,7 +289,7 @@
                 state.players = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 const me = state.players.find(p => p.id === userId);
                 if (me) {
-                    state.myContribution = me.contributions?.[state.game?.round] || 0;
+                    state.myContribution = me.contributions?.[state.game?.round] || -1; // Use -1 to denote not-yet-contributed
                     state.accumulatedPayoff = me.accumulatedPayoff || 0;
                 }
                 renderUI();
@@ -310,6 +310,8 @@
             const groups = groupBy(state.players, 'group');
             const sortedGroupKeys = Object.keys(groups).sort();
             const minGroupTotal = calculateMinGroupTotal(groups);
+            const isEveryoneReady = state.players.every(p => p.contributions?.[state.game.round] !== undefined);
+            const playerMultipleOfGroupSize = state.players.length % state.game.gameParams.groupSize === 0;
 
             let playersTableHTML = `
                 <div class="overflow-x-auto">
@@ -404,10 +406,12 @@
                     </div>
 
                     <div class="flex flex-col sm:flex-row gap-4 mb-8 w-full justify-center">
-                        <button id="start-round-btn" class="btn btn-success" ${state.isRoundActive ? 'disabled' : ''}>${state.game.round === 0 ? 'Start Game' : 'Start Next Round'}</button>
-                        <button id="end-round-btn" class="btn btn-primary" ${!state.isRoundActive ? 'disabled' : ''}>End Round</button>
+                        <button id="start-round-btn" class="btn btn-success" ${state.isRoundActive || !playerMultipleOfGroupSize ? 'disabled' : ''}>${state.game.round === 0 ? 'Start Game' : 'Start Next Round'}</button>
+                        <button id="end-round-btn" class="btn btn-primary" ${!state.isRoundActive || !isEveryoneReady ? 'disabled' : ''}>End Round</button>
                         <button id="reset-game-btn" class="btn btn-danger">Reset Game</button>
                     </div>
+                    ${!playerMultipleOfGroupSize ? `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg mb-6 w-full" role="alert"><p>Cannot start game. Total players must be a multiple of the group size.</p></div>` : ''}
+                    ${state.isRoundActive && !isEveryoneReady ? `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6 w-full" role="alert"><p>Waiting for all players to submit their contributions...</p></div>` : ''}
 
                     <div class="w-full">
                         <h2 class="text-xl font-bold mb-4">Player & Group Data</h2>
@@ -497,7 +501,7 @@
                             </div>
                         </div>
 
-                        ${state.myContribution === 0 ? `
+                        ${state.myContribution === -1 ? `
                         <form id="contribution-form">
                             <div class="mb-4">
                                 <label for="contribution-amount" class="block text-gray-700 font-medium mb-2">
@@ -520,11 +524,11 @@
                           Your User ID: ${userId}
                         </div>
                         
-                        ${state.myContribution !== 0 && state.game.round > 0 ? `
+                        ${!state.isRoundActive && state.myContribution !== -1 && state.game.round > 0 ? `
                         <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="bg-indigo-50 p-4 rounded-lg text-center">
                                 <p class="text-sm text-gray-600">Your Group's Total Pool (Prev. Round)</p>
-                                <p class="font-bold text-xl">${state.players.find(p => p.id === userId).payoffs?.[state.game.round - 1] > 0 ? myGroupContribution : myGroupContribution}</p>
+                                <p class="font-bold text-xl">${myGroupContribution}</p>
                             </div>
                             <div class="bg-pink-50 p-4 rounded-lg text-center">
                                 <p class="text-sm text-gray-600">Min. Pool of Other Groups (Prev. Round)</p>
@@ -551,7 +555,7 @@
 
             if (!isRegistered) {
                 document.getElementById('join-form').addEventListener('submit', joinGame);
-            } else if (state.myContribution === 0) {
+            } else if (state.myContribution === -1) {
                 document.getElementById('contribution-form').addEventListener('submit', submitContribution);
             }
         }
@@ -659,6 +663,17 @@
                 showAlert('Error', 'Authentication not complete. Please wait a moment and try again.');
                 return;
             }
+            const gameData = state.game;
+            const playersColRef = collection(db, `/artifacts/${appId}/public/data/players`);
+            const playersSnapshot = await getDocs(playersColRef);
+            const totalPlayers = playersSnapshot.docs.length;
+            const groupSize = gameData.gameParams.groupSize;
+
+            if (totalPlayers % groupSize !== 0) {
+                showAlert('Cannot Start Game', 'The total number of players must be a multiple of the group size to start the game.');
+                return;
+            }
+            
             try {
                 const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${state.gameId}`);
                 await setDoc(gameDocRef, {

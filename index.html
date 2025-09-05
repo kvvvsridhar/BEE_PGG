@@ -728,69 +728,73 @@
                 return;
             }
             try {
+                // Mark round as ended
                 const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${state.gameId}`);
                 await setDoc(gameDocRef, { isRoundActive: false }, { merge: true });
-
+        
                 const playersColRef = collection(db, `/artifacts/${appId}/public/data/players`);
                 const querySnapshot = await getDocs(playersColRef);
                 const allPlayers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // Group players and calculate group totals
-                const groups = groupBy(allPlayers, 'group');
-                const groupTotals = Object.values(groups).map(groupMembers => ({
-                    groupName: groupMembers[0].group,
-                    size: groupMembers.length,
-                    totalContribution: groupMembers.reduce((sum, p) => sum + (p.contributions?.[state.game.round] || 0), 0)
-                }));
-
-                // Find the minimum total contribution and its group size
-                let minGroupTotal = Infinity;
-                let minGroupSize = 1; // Default to 1 to avoid division by zero
-                for (const group of groupTotals) {
-                    if (group.totalContribution < minGroupTotal) {
-                        minGroupTotal = group.totalContribution;
-                        minGroupSize = group.size;
+        
+                // --- Compute group totals & averages ---
+                const groupStats = {};
+                for (const p of allPlayers) {
+                    const contrib = p.contributions?.[state.game.round] || 0;
+                    if (!groupStats[p.group]) {
+                        groupStats[p.group] = { total: 0, size: 0 };
                     }
+                    groupStats[p.group].total += contrib;
+                    groupStats[p.group].size += 1;
                 }
-
-                // Calculate and update payoffs for each player
+        
+                // Convert to array for easier min calculation
+                const groupArray = Object.keys(groupStats).map(g => ({
+                    groupName: g,
+                    total: groupStats[g].total,
+                    size: groupStats[g].size,
+                    avg: groupStats[g].total / groupStats[g].size
+                }));
+        
+                // --- Calculate payoff for each player ---
                 for (const player of allPlayers) {
-                    const myContribution = player.contributions?.[state.game.round] || 0;
-                    const myGroup = groupTotals.find(g => g.groupName === player.group);
-                    
-                    // Check if player's group exists to prevent errors
-                    if (!myGroup) {
-                        console.error(`Player ${player.id} does not belong to a valid group.`);
-                        continue;
+                    const e = state.game.gameParams.e;
+                    const m = state.game.gameParams.m;
+                    const round = state.game.round;
+                    const c_i = player.contributions?.[round] || 0;
+        
+                    const myGroup = groupArray.find(g => g.groupName === player.group);
+                    if (!myGroup) continue;
+        
+                    const myGroupAvg = myGroup.avg;
+        
+                    // Find min average of OTHER groups
+                    const otherGroups = groupArray.filter(g => g.groupName !== player.group);
+                    let minOtherAvg = 0;
+                    if (otherGroups.length > 0) {
+                        minOtherAvg = Math.min(...otherGroups.map(g => g.avg));
                     }
-                    
-                    const myGroupTotal = myGroup.totalContribution;
-                    const myGroupSize = myGroup.size;
-
-                    // Payoff formula: Πi = e - ci + (m/ni) * Σck - (m-1/nj) * min(Σcl)
-                    // The 'nj' is the size of the group with the minimum contribution.
-                    // The `minGroupTotal` is the total contribution of that group.
-                    const payoff = state.game.gameParams.e - myContribution +
-                        (state.game.gameParams.m / myGroupSize) * myGroupTotal -
-                        (state.game.gameParams.m - 1) / minGroupSize * minGroupTotal;
-
+        
+                    // Payoff formula: Πᵢ = e - cᵢ + m * avg(group_i) - (m - 1) * min(avg(other_groups))
+                    const payoff = e - c_i + m * myGroupAvg - (m - 1) * minOtherAvg;
+        
+                    const newAccumulated = (player.accumulatedPayoff || 0) + payoff;
+        
                     const playerDocRef = doc(db, `/artifacts/${appId}/public/data/players/${player.id}`);
                     await setDoc(playerDocRef, {
-                        accumulatedPayoff: player.accumulatedPayoff + payoff,
                         payoffs: {
-                            [state.game.round]: payoff
-                        }
+                            ...player.payoffs,
+                            [round]: payoff
+                        },
+                        accumulatedPayoff: newAccumulated
                     }, { merge: true });
                 }
-
-                showAlert('Round Ended', `Payoffs for round ${state.game.round} have been calculated.`);
-
+        
+                showAlert('Round Ended', `Round ${state.game.round} results calculated.`);
             } catch (error) {
                 console.error("Error ending round:", error);
                 showAlert('Error', `Failed to end round: ${error.message}`);
             }
         }
-
 
         async function resetGame() {
             if (!userId) {

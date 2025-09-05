@@ -441,6 +441,13 @@
             const myContribution = myData && myData.contributions && myData.contributions[state.game.round] !== undefined
                 ? myData.contributions[state.game.round]
                 : -1;
+            
+            // Get last round's payoff and group info
+            const lastRound = state.game.round > 0 ? state.game.round - 1 : 0;
+            const lastRoundPayoff = myData && myData.payoffs?.[lastRound] || 0;
+            const myLastGroupContribution = myGroupMembers.reduce((sum, p) => sum + (p.contributions?.[lastRound] || 0), 0);
+            const minOtherGroupTotalLastRound = calculateMinGroupTotal(groups, myGroup, lastRound);
+
 
             let mainContentHTML = '';
             if (!isRegistered) {

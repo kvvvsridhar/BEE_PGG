@@ -132,32 +132,35 @@
 
     <!-- Firebase CDN -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
         setLogLevel('debug');
 
         // Safely access global variables to avoid ReferenceError
         let appId = 'default-app-id';
-
-        const firebaseConfig = {
-          apiKey: "AIzaSyBh4jbZul9guvwG6cec4PSynr8BDPw-eyY",
-          authDomain: "bee-pgg.firebaseapp.com",
-          projectId: "bee-pgg",
-          storageBucket: "bee-pgg.firebasestorage.app",
-          messagingSenderId: "215890679928",
-          appId: "1:215890679928:web:3b3cd6fdaebe990ad4f58d",
-          measurementId: "G-JBE1ZHWR2K"
+        let firebaseConfig = {
+            apiKey: "AIzaSyDIvu7hdyw2ibllu1p_q2hQgoHa5kCjz7E",
+            authDomain: "public-goods-game-4e6ad.firebaseapp.com",
+            projectId: "public-goods-game-4e6ad",
+            storageBucket: "public-goods-game-4e6ad.firebasestorage.app",
+            messagingSenderId: "807192829857",
+            appId: "1:807192829857:web:33f291254b5d6c360fb5e0"
         };
-        let initialAuthToken = 'your_auth_token';
+        let initialAuthToken = '';
 
         if (typeof __app_id !== 'undefined') {
             appId = __app_id;
         }
         if (typeof __firebase_config !== 'undefined') {
-            firebaseConfig = JSON.parse(__firebase_config);
+            try {
+                // If a valid config is provided by the environment, use it
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Failed to parse firebaseConfig from environment. Using hardcoded values.");
+            }
         }
         if (typeof __initial_auth_token !== 'undefined') {
             initialAuthToken = __initial_auth_token;

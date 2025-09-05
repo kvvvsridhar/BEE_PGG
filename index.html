@@ -249,7 +249,7 @@
                         hostId: userId,
                         isRoundActive: false,
                         round: 0,
-                        gameParams: { e: 10, m: 2 }
+                        gameParams: { e: 10, m: 2, groupSize: 4 }
                     });
                 } else {
                     const gameData = gameDocSnap.data();
@@ -384,7 +384,7 @@
 
                     <div class="bg-gray-100 p-6 rounded-lg mb-8 w-full">
                         <h2 class="text-xl font-bold mb-4">Game Parameters</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <label for="param-e" class="block text-gray-700 font-medium mb-1">Endowment ($e$)</label>
                                 <input type="number" id="param-e" class="input-field" min="1" value="${state.game.gameParams.e}">
@@ -392,6 +392,10 @@
                             <div>
                                 <label for="param-m" class="block text-gray-700 font-medium mb-1">Multiplier ($m$)</label>
                                 <input type="number" id="param-m" class="input-field" min="1" step="0.1" value="${state.game.gameParams.m}">
+                            </div>
+                            <div>
+                                <label for="param-group-size" class="block text-gray-700 font-medium mb-1">Group Size</label>
+                                <input type="number" id="param-group-size" class="input-field" min="2" value="${state.game.gameParams.groupSize}">
                             </div>
                         </div>
                         <div class="mt-4 flex justify-center">
@@ -437,15 +441,25 @@
                 mainContentHTML = `
                     <div class="bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
                         <h2 class="text-2xl font-bold mb-4 text-center">Join the Game</h2>
-                        <p class="text-center text-gray-600 mb-6">Enter your name and choose a group to begin.</p>
+                        <p class="text-center text-gray-600 mb-6">Enter your details to begin.</p>
                         <form id="join-form">
                             <div class="mb-4">
                                 <label for="player-name" class="block text-gray-700 font-medium mb-1">Your Name</label>
                                 <input type="text" id="player-name" class="input-field" required>
                             </div>
+                            <div class="mb-4">
+                                <label for="player-age" class="block text-gray-700 font-medium mb-1">Age</label>
+                                <input type="number" id="player-age" class="input-field" min="1" required>
+                            </div>
                             <div class="mb-6">
-                                <label for="group-name" class="block text-gray-700 font-medium mb-1">Group Name</label>
-                                <input type="text" id="group-name" class="input-field" required>
+                                <label for="player-gender" class="block text-gray-700 font-medium mb-1">Gender</label>
+                                <select id="player-gender" class="input-field" required>
+                                    <option value="" disabled selected>Select your gender</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Non-binary">Non-binary</option>
+                                    <option value="Prefer not to say">Prefer not to say</option>
+                                </select>
                             </div>
                             <button type="submit" class="btn btn-primary w-full">Join Game</button>
                         </form>
@@ -543,10 +557,11 @@
         async function joinGame(event) {
             event.preventDefault();
             const name = document.getElementById('player-name').value;
-            const group = document.getElementById('group-name').value;
+            const age = parseInt(document.getElementById('player-age').value, 10);
+            const gender = document.getElementById('player-gender').value;
 
-            if (!name || !group) {
-                showAlert('Error', 'Please enter your name and a group name.');
+            if (!name || !age || !gender) {
+                showAlert('Error', 'Please enter your name, age, and gender.');
                 return;
             }
             if (!userId) {
@@ -554,10 +569,42 @@
                 return;
             }
             try {
+                // Get the current list of players to find the best group
+                const playersColRef = collection(db, `/artifacts/${appId}/public/data/players`);
+                const querySnapshot = await getDocs(playersColRef);
+                const allPlayers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                const groups = groupBy(allPlayers, 'group');
+                const groupSizes = Object.keys(groups).map(groupName => ({
+                    name: groupName,
+                    size: groups[groupName].length
+                }));
+
+                const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${state.gameId}`);
+                const gameDocSnap = await getDoc(gameDocRef);
+                const gameData = gameDocSnap.data();
+                const groupSize = gameData.gameParams.groupSize;
+
+                // Find the group with the minimum number of players that is not full
+                let targetGroup = null;
+                const availableGroups = groupSizes.filter(g => g.size < groupSize);
+
+                if (availableGroups.length > 0) {
+                    // Sort by size ascending and pick the first one
+                    availableGroups.sort((a, b) => a.size - b.size);
+                    targetGroup = availableGroups[0].name;
+                } else {
+                    // Create a new group if all are full or no groups exist
+                    const newGroupId = `Group_${groupSizes.length + 1}`;
+                    targetGroup = newGroupId;
+                }
+
                 const playerDocRef = doc(db, `/artifacts/${appId}/public/data/players/${userId}`);
                 await setDoc(playerDocRef, {
                     name,
-                    group,
+                    age,
+                    gender,
+                    group: targetGroup,
                     accumulatedPayoff: 0,
                     contributions: {},
                     payoffs: {}
@@ -621,15 +668,16 @@
             try {
                 const endowment = parseInt(document.getElementById('param-e').value, 10);
                 const multiplier = parseFloat(document.getElementById('param-m').value);
+                const groupSize = parseInt(document.getElementById('param-group-size').value, 10);
 
-                if (isNaN(endowment) || endowment <= 0 || isNaN(multiplier) || multiplier <= 0) {
-                    showAlert('Invalid Parameters', 'Endowment and Multiplier must be positive numbers.');
+                if (isNaN(endowment) || endowment <= 0 || isNaN(multiplier) || multiplier <= 0 || isNaN(groupSize) || groupSize < 2) {
+                    showAlert('Invalid Parameters', 'Endowment, Multiplier, and Group Size must be positive numbers. Group Size must be at least 2.');
                     return;
                 }
 
                 const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${state.gameId}`);
                 await setDoc(gameDocRef, {
-                    gameParams: { e: endowment, m: multiplier }
+                    gameParams: { e: endowment, m: multiplier, groupSize: groupSize }
                 }, { merge: true });
                 showAlert('Parameters Saved', 'Game parameters have been updated for the next round.');
             } catch (error) {

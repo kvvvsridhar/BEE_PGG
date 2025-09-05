@@ -433,7 +433,6 @@
             const myData = state.players.find(p => p.id === userId);
             const myGroup = myData ? myData.group : 'Not Assigned';
             const myGroupMembers = groups[myGroup] || [];
-            const myGroupSize = myGroupMembers.length;
             
             const isRegistered = myData && myData.name && myData.group;
             

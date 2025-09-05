@@ -625,17 +625,17 @@
         async function submitContribution(event) {
             event.preventDefault();
             const contribution = document.getElementById('contribution-amount').value;
+            const contributionNum = Number(contribution); // Convert input to number
             
             // Check for integer contribution
-            if (!Number.isInteger(Number(contribution))) {
+            if (!Number.isInteger(contributionNum)) {
                 showAlert('Invalid Contribution', 'Please enter a whole number.');
                 return;
             }
 
-            const contributionInt = parseInt(contribution, 10);
             const endowment = state.game.gameParams.e;
 
-            if (isNaN(contributionInt) || contributionInt < 0 || contributionInt > endowment) {
+            if (isNaN(contributionNum) || contributionNum < 0 || contributionNum > endowment) {
                 showAlert('Invalid Contribution', `Please enter a value between 0 and ${endowment}.`);
                 return;
             }
@@ -648,7 +648,7 @@
                 const playerDocRef = doc(db, `/artifacts/${appId}/public/data/players/${userId}`);
                 await setDoc(playerDocRef, {
                     contributions: {
-                        [state.game.round]: contributionInt
+                        [state.game.round]: contributionNum
                     }
                 }, { merge: true });
 

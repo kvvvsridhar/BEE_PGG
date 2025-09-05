@@ -763,33 +763,25 @@
                     const c_i = player.contributions?.[round] || 0;
         
                     const myGroup = groupArray.find(g => g.groupName === player.group);
-                    if (!myGroup) continue;
-        
                     const myGroupAvg = myGroup.avg;
         
-                    // Find min average of OTHER groups
+                    // find min avg of other groups
                     const otherGroups = groupArray.filter(g => g.groupName !== player.group);
-                    let minOtherAvg = 0;
-                    if (otherGroups.length > 0) {
-                        minOtherAvg = Math.min(...otherGroups.map(g => g.avg));
-                    }
+                    const minOtherAvg = otherGroups.length > 0 ? Math.min(...otherGroups.map(g => g.avg)) : 0;
         
-                    // Payoff formula: Πᵢ = e - cᵢ + m * avg(group_i) - (m - 1) * min(avg(other_groups))
+                    // payoff formula: e - c_i + m * avg(myGroup) - (m-1) * min(other avgs)
                     const payoff = e - c_i + m * myGroupAvg - (m - 1) * minOtherAvg;
         
-                    const newAccumulated = (player.accumulatedPayoff || 0) + payoff;
-        
+                    // Update Firestore with new payoff and accumulated payoff
                     const playerDocRef = doc(db, `/artifacts/${appId}/public/data/players/${player.id}`);
+                    const newAccumulated = (player.accumulatedPayoff || 0) + payoff;
                     await setDoc(playerDocRef, {
-                        payoffs: {
-                            ...player.payoffs,
-                            [round]: payoff
-                        },
+                        payoffs: { ...player.payoffs, [round]: payoff },
                         accumulatedPayoff: newAccumulated
                     }, { merge: true });
                 }
         
-                showAlert('Round Ended', `Round ${state.game.round} results calculated.`);
+                showAlert('Round Ended', `Round ${state.game.round} has ended. Payoffs calculated.`);
             } catch (error) {
                 console.error("Error ending round:", error);
                 showAlert('Error', `Failed to end round: ${error.message}`);
